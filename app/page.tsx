@@ -1,106 +1,51 @@
 "use client";
+import { useState } from "react";
 
-import { useState, type FormEvent } from "react";
+type Msg = { role: "user" | "assistant"; content: string };
 
-type Message = {
-  role: "user" | "assistant";
-  text: string;
-};
+export default function Home() {
+  const [messages, setMessages] = useState<Msg[]>([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-export default function ChatPage() {
-  const [text, setText] = useState("");
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isSending, setIsSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function sendMessage(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (isSending || !text.trim()) return;
-
-    const message = text;
-    setIsSending(true);
-    setError(null);
-
+  async function send() {
+    const text = input.trim();
+    if (!text || loading) return;
+    const next: Msg[] = [...messages, { role: "user", content: text }];
+    setLoading(true);
+    setError("");
     try {
-      const response = await fetch("/api/chat", {
+      const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ messages: next }),
       });
-      const data: unknown = await response.json();
-
-      if (!response.ok) {
-        const detail =
-          typeof data === "object" &&
-          data !== null &&
-          "error" in data &&
-          typeof data.error === "string"
-            ? data.error
-            : "Unable to send your message. Please try again.";
-        throw new Error(detail);
-      }
-
-      if (
-        typeof data !== "object" ||
-        data === null ||
-        !("answer" in data) ||
-        typeof data.answer !== "string"
-      ) {
-        throw new Error("The server returned an invalid reply. Please try again.");
-      }
-
-      const answer = data.answer;
-      setMessages((previous) => [
-        ...previous,
-        { role: "user", text: message },
-        { role: "assistant", text: answer },
-      ]);
-      setText("");
-    } catch (error) {
-      setError(
-        error instanceof Error
-          ? error.message
-          : "Unable to send your message. Please try again.",
-      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Request failed");
+      setMessages([...next, { role: "assistant", content: data.answer }]);
+      setInput("");
+    } catch (e: any) {
+      setError(e.message); // old messages stay, user can retry
     } finally {
-      setIsSending(false);
+      setLoading(false);
     }
   }
 
   return (
-    <main className="chat">
-      <h1>Support chat</h1>
-      <p>Send a message and get an echo reply.</p>
-      <section
-        className="messages"
-        role="log"
-        aria-label="Chat messages"
-        aria-live="polite"
-      >
-        {messages.length === 0 && <p>No messages yet.</p>}
-        {messages.map((message, index) => (
-          <div className={`message ${message.role}`} key={index}>
-            <strong>{message.role === "user" ? "You" : "Assistant"}</strong>
-            <p>{message.text}</p>
-          </div>
+    <main style={{ maxWidth: 700, margin: "40px auto", fontFamily: "sans-serif" }}>
+      <h1>Chat</h1>
+      <a href="/triage">Go to triage →</a>
+      <div style={{ margin: "20px 0" }}>
+        {messages.map((m, i) => (
+          <p key={i}><b>{m.role === "user" ? "You" : "AI"}:</b> {m.content}</p>
         ))}
-      </section>
-      <form onSubmit={sendMessage} aria-busy={isSending}>
-        <label htmlFor="message">Your message</label>
-        <textarea
-          id="message"
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          placeholder="Describe what you need help with..."
-          rows={3}
-          required
-          disabled={isSending}
-        />
-        <button type="submit" disabled={isSending || !text.trim()}>
-          {isSending ? "Sending..." : "Send"}
-        </button>
-        {error && <p role="alert">{error}</p>}
-      </form>
+      </div>
+      {error && <p style={{ color: "red" }}>{error}</p>}
+      <textarea value={input} onChange={(e) => setInput(e.target.value)} rows={3} style={{ width: "100%" }} />
+      <button onClick={send} disabled={loading || !input.trim()}>
+        {loading ? "Sending..." : "Send"}
+      </button>
     </main>
   );
 }

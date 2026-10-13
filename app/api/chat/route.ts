@@ -1,25 +1,42 @@
-export async function POST(request: Request) {
-  let body: unknown;
+import { NextResponse } from "next/server";
+import { ai, MODEL } from "../../../lib/llm";
+
+type Msg = { role: "user" | "assistant"; content: string };
+
+export async function POST(req: Request) {
+  let body: any;
   try {
-    body = await request.json();
+    body = await req.json();
   } catch {
-    return Response.json({ error: "Invalid JSON body." }, { status: 400 });
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  if (
-    typeof body !== "object" ||
-    body === null ||
-    !("message" in body) ||
-    typeof body.message !== "string" ||
-    !body.message.trim()
-  ) {
-    return Response.json(
-      { error: "Please provide a non-empty message string." },
-      { status: 400 },
+  const messages = body?.messages;
+  const valid =
+    Array.isArray(messages) &&
+    messages.length > 0 &&
+    messages.every(
+      (m: any) =>
+        (m?.role === "user" || m?.role === "assistant") &&
+        typeof m.content === "string" &&
+        m.content.trim() !== ""
     );
+  if (!valid) {
+    return NextResponse.json({ error: "Invalid messages" }, { status: 400 });
   }
 
-  return Response.json({
-    answer: `Hello, you just said: ${body.message}`,
-  });
+  try {
+    const response = await ai.models.generateContent({
+      model: MODEL,
+      contents: (messages as Msg[]).map((m) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }],
+      })),
+      config: { systemInstruction: "You are a helpful assistant. Answer briefly." },
+    });
+    return NextResponse.json({ answer: response.text ?? "" });
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json({ error: "LLM call failed" }, { status: 502 });
+  }
 }
