@@ -1,0 +1,3 @@
+{"at":"2026-10-24T21:34:49.576Z","strategy":"llm","modelUsed":"gemini-flash-latest","category":"billing","priority":"medium","fellBackToLlm":null,"usage":{"input":418,"output":240,"total":658},"costUsd":0.0007254,"latencyMs":46429}
+{"at":"2026-10-24T21:35:24.555Z","strategy":"dm","modelUsed":"vllm-sr/d3-turbo","category":"billing","priority":"medium","fellBackToLlm":null,"usage":{"input":441,"output":0,"total":441},"costUsd":0,"latencyMs":552}
+{"at":"2026-10-24T21:37:22.417Z","strategy":"dm+llm","modelUsed":"vllm-sr/d3-turbo -> gemini-flash-latest","category":"billing","priority":"medium","fellBackToLlm":true,"usage":{"input":859,"output":280,"total":1139},"costUsd":0.0008254,"latencyMs":37066}

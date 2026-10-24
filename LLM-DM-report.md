@@ -46,25 +46,27 @@ Observability: every triage call and every smoke test run is logged with the str
 
 ## 3. Results
 
-Smoke test on the labelled 100 set, N = ___ tickets (same sample size for all runs).
+Smoke tests on the labelled 100 set (random samples), plus single-ticket tests for all three strategies.
 
-| Strategy | Model(s) | Category acc. | Priority acc. | Both correct | Avg latency | p50 latency | Total tokens | Est. cost | LLM fallbacks | Errors |
+| Strategy | Model(s) | N | Category acc. | Priority acc. | Both correct | Avg latency | p50 latency | Total tokens | Est. cost | Errors |
 |---|---|---|---|---|---|---|---|---|---|---|
-| llm | gemini-flash-latest | __% | __% | __% | __ ms | __ ms | __ | $__ | – | __ |
-| dm | vllm-sr/d3-turbo | __% | __% | __% | __ ms | __ ms | __ (input only) | $0 (free tier) | – | __ |
-| dm+llm | d3-turbo → gemini-flash-latest | __% | __% | __% | __ ms | __ ms | __ | $__ | __ / N | __ |
+| llm | gemini-flash-latest | 5 | 80% | 100% | 80% | 39,630 ms | 41,461 ms | 4,610 | $0.00673 | 0 |
+| dm | vllm-sr/d3-turbo | 20 | 90% | 80% | 75% | 297 ms | 206 ms | 9,934 (input only) | $0 | 0 |
+| dm+llm | d3-turbo → gemini-flash-latest | 1 (single ticket) | – | – | – | 37,066 ms | – | 1,139 | $0.000825 | 0 |
 
-Cost is estimated at the paid list price in `lib/models.ts` (the free tiers cost $0 in practice).
+Single-ticket test ("charged twice, please refund"): all three strategies answered billing / medium. The DM took 552 ms for $0, and Gemini took 46,429 ms. In dm+llm, the DM was 100% sure of the category but only 66.5% sure of the priority (below the 0.7 threshold), so it handed the ticket to Gemini, as designed.
+
+Cost is estimated at the paid list price in `lib/models.ts`. The free tiers cost $0 in practice.
 
 ## 4. Analysis
 
-- **Accuracy:** ___ (Which strategy is best on category? On priority? Priority is the harder label: medium vs high is a judgement call.)
-- **Calibration:** ___ (On the tickets the DM got wrong, what confidence did it show? Was it ever very sure and wrong?)
-- **Speed and cost:** ___ (DM vs LLM latency. The DM bills input tokens only, the LLM also bills output and thinking tokens.)
-- **Hybrid:** ___ (How many tickets fell back to Gemini? Did the fallback fix the DM's mistakes? Would a different threshold be better?)
-- **Hard tickets:** ___ (prompt injections, tone mismatch, multilingual tickets: did the DM resist them like the LLM?)
-- **Limits:** the DM cannot write a summary or an action; small sample; one run per strategy; the free API rate-limits and its numbers can change week to week.
+- **Speed:** the decision model was about 130 times faster than Gemini (297 ms against 39.6 s on average). Gemini was especially slow on the free tier.
+- **Cost:** the DM bills input tokens only and generates no text: about 500 tokens per ticket and $0 on the free tier. Gemini used about 920 tokens per ticket, because it also writes a summary and an action, and its output and thinking tokens are billed.
+- **Accuracy:** the DM did well on category (90%, 2 mismatches out of 20), but priority was its weak point (80%, 4 mismatches). Gemini got all 5 priorities right and 4 out of 5 categories. Priority is the harder label, because medium vs high is a judgement call. The DM's low confidence on priority in the single-ticket test matches this.
+- **Confidence:** the DM tells us how sure it is, and the hybrid acts on that number. The uncertain decisions (mostly priority) go to Gemini, and the confident ones stay fast and free.
+- **What the DM cannot do:** it gives no summary and no suggested action, only labels and probabilities.
+- **Limits:** the samples are small (5 and 20 tickets, not the same tickets) and there is one run per strategy, because Gemini took about 40 s per ticket on the free tier. The results are indicative, not conclusive.
 
 ## 5. Conclusion
 
-___ (Recommended strategy for this app and why.)
+dm+llm is the best fit for this app. The decision model is fast, free and good at categories, so it handles the tickets it is confident about. Gemini handles the uncertain ones (mostly priority) and writes the summary and action for the agent. With more time, we would run all three strategies on the same full labelled 100 set and tune the 0.7 threshold.
