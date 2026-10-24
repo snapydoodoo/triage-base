@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import Nav from "./components/Nav";
 
 type Msg = { role: "user" | "assistant"; content: string };
 
@@ -34,8 +35,8 @@ export default function Home() {
 
   return (
     <main style={{ maxWidth: 700, margin: "40px auto", fontFamily: "sans-serif" }}>
+      <Nav />
       <h1>Chat</h1>
-      <a href="/triage">Go to triage →</a>
       <div style={{ margin: "20px 0" }}>
         {messages.map((m, i) => (
           <p key={i}><b>{m.role === "user" ? "You" : "AI"}:</b> {m.content}</p>

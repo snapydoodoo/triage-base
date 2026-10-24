@@ -1,63 +1,73 @@
 # Support ticket triage app
 
-This repository is the starting point for an educational project in which
-computer science students will build a support ticket triage application. The
-planned application will use a large language model (LLM) from the backend to
-help analyze incoming support requests and support the triage process.
+Next.js app that triages Kestrel Analytics support tickets with an LLM (Gemini),
+a decision model (vLLM Semantic Router Decision 3.0), or both.
 
-The codebase is intentionally a basic skeleton. It provides a small chat
-interface and server endpoint as a first step: before building the full triage
-workflow, students can use this mock chat to validate the connection between
-the application and an LLM provider.
+## Features
 
-## Current status
+| Page | What it does |
+|---|---|
+| `/` | Chat with memory: the whole conversation history is sent on every turn |
+| `/triage` | Triage v2: one ticket → category, priority, human-review flag, summary, suggested action. Shows token usage (input / output / total), estimated cost, latency, the model used and, for the decision model, its confidence |
+| `/smoke` | Smoke test runner: pick a dataset (labelled 100 or 500), a random sample size, a strategy and a model. Shows predicted vs labelled category / priority per ticket and the mismatch summary |
+| `/admin` | Every logged smoke test run (accuracy, outcome counts, latency, tokens, cost, model) + side-by-side comparison of two runs + recent single triage calls |
 
-The chat feature is currently a mockup implemented as an echo service. The
-client sends a message to `/api/chat`, and the server returns it in a
-confirmation response. No LLM provider is called, and no LLM configuration is
-needed to run this version.
+**Strategies** (selectable on `/triage` and `/smoke`):
 
-This simple end-to-end flow is intended to make it possible to verify the
-application's client-to-backend connection first, then integrate and validate
-an LLM provider as an intermediate step, before implementing the complete
-support ticket triage feature. The triage route and LLM client are placeholders
-for that future work.
+- `llm` – Gemini only.
+- `dm` – decision model only (`vllm-sr/d3-turbo`): labels and probabilities, no text.
+- `dm+llm` – decision model first; if its confidence on category or priority is below
+  `DM_CONFIDENCE_THRESHOLD` (0.7), Gemini triages the ticket instead.
 
-## Sample data
+See [`LLM-DM-report.md`](./LLM-DM-report.md) for the decision model research and results.
 
-The `data/` folder contains two support-ticket datasets:
+## Validation (F1)
 
-- **500 unlabelled tickets** in
-  [`support_tickets_500.csv`](./data/support_tickets_500.csv) and
-  [`support_tickets_500.json`](./data/support_tickets_500.json), for exploring
-  and developing the triage workflow.
-- **100 labelled tickets** in
-  [`support_tickets_100_labelled.csv`](./data/support_tickets_100_labelled.csv)
-  and
-  [`support_tickets_100_labelled.json`](./data/support_tickets_100_labelled.json).
-  These include triage annotations such as category, priority, and whether a
-  ticket needs human review, making them useful for testing and evaluating
-  triage approaches.
+All schemas live in `lib/schema.ts` (Zod):
 
-## Run locally
+- `TriageRequestSchema` – `{ ticket (1–5000 chars), strategy, model? }`. Invalid requests get HTTP 400 with a readable message, shown on the front end.
+- `LlmTriageOutputSchema` – the LLM answer. It is converted to a JSON schema and sent to Gemini (`responseJsonSchema`), then the answer is validated with Zod.
+- `TriageResponseSchema` – what the API returns; validated before it is sent.
+- Decision model answers are validated in `lib/dm.ts` (unknown labels are rejected).
+
+## Code map
+
+```
+lib/schema.ts    Zod schemas (request, LLM output, response, smoke request)
+lib/prompt.ts    triage-v2 system prompt (v1 kept for reference)
+lib/triage.ts    Gemini triage v2 (JSON output + Zod + token usage)
+lib/dm.ts        decision model client (POST /v1/systemone)
+lib/strategy.ts  llm / dm / dm+llm
+lib/models.ts    model list (F5) and price table for cost estimates
+lib/logs.ts      JSONL logs in logs/
+lib/data.ts      datasets + random sampling
+app/api/triage   POST triage one ticket
+app/api/smoke    POST run a smoke test
+app/api/models   GET available models
+```
+
+## Setup
 
 Requires Node.js 20.9 or newer.
 
 ```sh
 npm install
+cp .env.example .env.local   # then fill in LLM_API_KEY and DECISION_API_KEY
 npm run dev
 ```
 
-Open http://localhost:3033 and send a message. Both `npm run dev` and
-`npm run start` use port 3033.
+- `LLM_API_KEY`: Google AI Studio key.
+- `DECISION_API_KEY`: free key from https://decision.vllm-sr.ai (one click, no account).
+- `LLM_MODELS`: comma-separated list for the model menu.
 
-The Send button is disabled when the message is empty or contains only spaces,
-and while a request is in progress.
+Open http://localhost:3033. Logs are written to `logs/triage-calls.jsonl` and `logs/smoke-runs.jsonl`.
 
-The client posts `{ "message": "your text" }` to `/api/chat`. The App Router
-handler in `app/api/chat/route.ts` returns
-`{ "answer": "Hello, you just said: your text" }`. Invalid JSON or an
-empty/non-string message returns HTTP 400 with an `error`.
+## Sample data
+
+- `data/support_tickets_500.*` – 500 unlabelled tickets.
+- `data/support_tickets_100_labelled.*` – 100 tickets with category, priority and needs_human_review labels.
+
+Ticket TCK-10308 is longer than 5000 characters: the request schema rejects it, and the smoke test counts it as `rejected`.
 
 ## Checks
 
